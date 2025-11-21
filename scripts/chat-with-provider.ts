@@ -5,7 +5,7 @@ import { stdin as input, stdout as output } from "node:process"
 import { OpencodeAI } from "../src/index"
 import { generateText } from "ai"
 import { ProviderRuntimeOptions } from "../src/provider/provider"
-import { Provider } from "../src/provider/models"
+import { ModelsDev } from "../src/provider/models"
 
 async function prompt(question: string) {
     const rl = createInterface({ input, output })
@@ -14,7 +14,7 @@ async function prompt(question: string) {
     return answer.trim()
 }
 
-function sortModels(models: Provider["models"]) {
+function sortModels(models: ModelsDev.Provider["models"]) {
     return Object.entries(models)
         .filter(([, info]) => info)
         .sort((a, b) => a[0].localeCompare(b[0]))
@@ -55,7 +55,7 @@ async function main() {
     const entries = sortModels(provider.info.models)
     console.log(`\nModels for ${provider.info.name}:\n`)
     entries.forEach(([id, model], idx) => {
-        const line = `${idx + 1}. ${model.name} (${id})`
+        const line = `${idx + 1}. ${model!.name} (${id})`
         console.log(line)
     })
 
@@ -83,7 +83,6 @@ async function main() {
     const response = await generateText({
         model: languageModel,
         prompt: promptText,
-        maxSteps: 1, // Prevent multi-step tool calling
     })
 
     console.log("\nResponse:\n")
