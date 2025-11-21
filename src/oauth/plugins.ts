@@ -81,7 +81,10 @@ function shouldLoadAuthPlugin(spec: string) {
   if (!spec) return false
   if (DEFAULT_AUTH_PLUGINS.includes(spec)) return true
   const parsed = parsePackageSpec(spec)
+  // Check if package name includes "auth" or known auth plugins
   if (parsed && parsed.pkg.toLowerCase().includes("auth")) return true
+  // Special case for @openhax/codex which is an OpenAI OAuth plugin
+  if (parsed && parsed.pkg === "@openhax/codex") return true
   return spec.toLowerCase().includes("auth")
 }
 
