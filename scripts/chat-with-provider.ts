@@ -83,6 +83,7 @@ async function main() {
     const response = await generateText({
         model: languageModel,
         prompt: promptText,
+        maxSteps: 1, // Prevent multi-step tool calling
     })
 
     console.log("\nResponse:\n")
