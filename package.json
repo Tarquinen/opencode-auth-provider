@@ -1,8 +1,28 @@
 {
-  "name": "opencode-auth-provider",
-  "version": "0.1.0",
+  "name": "@tarquinen/opencode-auth-provider",
+  "version": "0.1.2",
   "description": "Reuse OpenCode authentication & provider logic for clean AI calls in plugins",
   "type": "module",
+  "author": "tarquinen",
+  "license": "MIT",
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "ai",
+    "llm",
+    "authentication",
+    "vercel-ai-sdk",
+    "provider",
+    "oauth"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Tarquinen/opencode-auth-provider.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Tarquinen/opencode-auth-provider/issues"
+  },
+  "homepage": "https://github.com/Tarquinen/opencode-auth-provider#readme",
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -16,8 +36,10 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && node -e \"require('fs').mkdirSync('dist/provider', { recursive: true }); require('fs').copyFileSync('src/provider/models-static.json', 'dist/provider/models-static.json');\"",
     "clean": "rm -rf dist",
+    "build": "npm run clean && tsc -p tsconfig.json",
+    "postbuild": "node -e \"require('fs').mkdirSync('dist/provider', { recursive: true }); require('fs').copyFileSync('src/provider/models-static.json', 'dist/provider/models-static.json');\"",
+    "prepublishOnly": "npm run build",
     "test": "bun run scripts/run-all-tests.ts",
     "test:e2e": "bun run scripts/test-e2e.ts",
     "test:oauth": "bun run scripts/test-openai-oauth.ts",

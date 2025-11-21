@@ -1,0 +1,18 @@
+# Development files
+node_modules/
+*.log
+.DS_Store
+bun.lock
+
+# Source files (since we're shipping dist/)
+src/
+tsconfig.json
+
+# Scripts
+scripts/
+
+# Git
+.git/
+.gitignore
+
+# Documentation (keep README.md)

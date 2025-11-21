@@ -38,6 +38,32 @@ export class OpencodeAI {
   async getDefaultModel() {
     return this.runtime.defaultModel()
   }
+
+  /**
+   * Get a suitable model for background analysis tasks like context pruning.
+   * Prefers small/cheap models to minimize cost while maintaining quality.
+   * 
+   * @param options - Optional configuration to specify a particular provider/model
+   * @returns A LanguageModel suitable for analysis tasks
+   */
+  async getAnalysisModel(options?: { provider?: string; model?: string }): Promise<LanguageModel> {
+    // If user specified a model in config, use it
+    if (options?.provider && options?.model) {
+      return this.getLanguageModel(options.provider, options.model)
+    }
+    
+    // Try to get a small, cheap model from the default provider
+    const { providerID } = await this.getDefaultModel()
+    const small = await this.getSmallModel(providerID)
+    
+    if (small) {
+      return small.language
+    }
+    
+    // Fallback to default model if no small model available
+    const { modelID } = await this.getDefaultModel()
+    return this.getLanguageModel(providerID, modelID)
+  }
 }
 
 export type { ProviderRuntimeOptions, ModelsDev }
