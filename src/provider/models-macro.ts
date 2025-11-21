@@ -1,3 +1,5 @@
+const FALLBACK_FILE = new URL("./models-static.json", import.meta.url)
+
 export async function data() {
   const path = Bun.env.MODELS_DEV_API_JSON
   if (path) {
@@ -6,6 +8,11 @@ export async function data() {
       return await file.text()
     }
   }
-  const json = await fetch("https://models.dev/api.json").then((x) => x.text())
-  return json
+
+  const response = await fetch("https://models.dev/api.json").catch(() => undefined)
+  if (response?.ok) {
+    return await response.text()
+  }
+
+  return Bun.file(FALLBACK_FILE).text()
 }

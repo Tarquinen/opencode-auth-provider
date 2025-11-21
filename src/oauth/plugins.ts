@@ -1,5 +1,7 @@
 import { Auth } from "../auth"
 import { Log } from "../util/log"
+import path from "path"
+import { BunProc } from "../bun-proc"
 
 export interface AuthPluginHook {
   provider: string
@@ -7,55 +9,8 @@ export interface AuthPluginHook {
 }
 
 const log = Log.create({ service: "oauth-plugins" })
-
-const SUPPORTED_PLUGINS: Record<string, () => Promise<(input: any) => Promise<{ auth?: AuthPluginHook }>>> = {
-  "opencode-anthropic-auth": async () => ((await import("opencode-anthropic-auth")) as any).AnthropicAuthPlugin,
-  "opencode-copilot-auth": async () => ((await import("opencode-copilot-auth")) as any).CopilotAuthPlugin,
-  "opencode-gemini-auth": async () => ((await import("opencode-gemini-auth")) as any).GeminiCLIOAuthPlugin,
-}
-
-const DEFAULT_PLUGINS = ["opencode-copilot-auth@0.0.5", "opencode-anthropic-auth@0.0.2"]
-
-export async function loadAuthPlugins(pluginSpecs: string[], includeDefaults: boolean) {
-  const specs = new Set(pluginSpecs ?? [])
-  if (includeDefaults) {
-    for (const item of DEFAULT_PLUGINS) specs.add(item)
-  }
-
-  const hooks: AuthPluginHook[] = []
-  const cache = new Map<string, AuthPluginHook>()
-
-  for (const spec of specs) {
-    const pkg = resolvePackageName(spec)
-    if (!pkg) continue
-    if (cache.has(pkg)) {
-      hooks.push(cache.get(pkg)!)
-      continue
-    }
-    const loader = SUPPORTED_PLUGINS[pkg]
-    if (!loader) continue
-    const factory = await loader().catch((error) => {
-      log.warn("failed to load auth plugin", { pkg, error })
-      return undefined
-    })
-    if (!factory) continue
-    const pluginHooks = await factory({
-      client: authClient,
-      directory: process.cwd(),
-      worktree: process.cwd(),
-      project: {},
-      $: Bun.$,
-    }).catch((error: any) => {
-      log.warn("auth plugin init failed", { pkg, error })
-      return undefined
-    })
-    if (!pluginHooks?.auth) continue
-    cache.set(pkg, pluginHooks.auth)
-    hooks.push(pluginHooks.auth)
-  }
-
-  return hooks
-}
+const DEFAULT_AUTH_PLUGINS = ["opencode-copilot-auth@0.0.5", "opencode-anthropic-auth@0.0.2"]
+const moduleCache = new Map<string, AuthPluginHook[]>()
 
 const authClient = {
   auth: {
@@ -65,17 +20,111 @@ const authClient = {
   },
 }
 
-function resolvePackageName(spec: string) {
-  if (!spec) return undefined
-  if (spec.startsWith("file://")) return undefined
-  if (spec.startsWith(".")) return undefined
-  if (spec.startsWith("@")) {
-    const slash = spec.indexOf("/")
-    if (slash === -1) return spec
-    const atIndex = spec.indexOf("@", slash)
-    return atIndex === -1 ? spec : spec.slice(0, atIndex)
+const pluginInput = {
+  client: authClient,
+  directory: process.cwd(),
+  worktree: process.cwd(),
+  project: {},
+  $: Bun.$,
+}
+
+export async function loadAuthPlugins(pluginSpecs: string[], includeDefaults: boolean) {
+  const specs = new Set(pluginSpecs ?? [])
+  if (includeDefaults) {
+    for (const spec of DEFAULT_AUTH_PLUGINS) specs.add(spec)
   }
-  const atIndex = spec.lastIndexOf("@")
-  if (atIndex <= 0) return spec
-  return spec.slice(0, atIndex)
+
+  const hooks: AuthPluginHook[] = []
+
+  for (const spec of specs) {
+    const trimmed = spec?.trim()
+    if (!trimmed) continue
+    if (!shouldLoadAuthPlugin(trimmed)) continue
+
+    const modulePath = await resolvePluginModule(trimmed)
+    if (!modulePath) continue
+
+    if (moduleCache.has(modulePath)) {
+      hooks.push(...moduleCache.get(modulePath)!)
+      continue
+    }
+
+    const moduleHooks: AuthPluginHook[] = []
+    const mod = await import(modulePath).catch((error) => {
+      log.warn("failed to load auth plugin module", { spec: trimmed, error })
+      return undefined
+    })
+    if (!mod) {
+      moduleCache.set(modulePath, moduleHooks)
+      continue
+    }
+
+    for (const [exportName, factory] of Object.entries(mod)) {
+      if (typeof factory !== "function") continue
+
+      const pluginHooks = await (factory as any)(pluginInput).catch((error: any) => {
+        log.warn("auth plugin init failed", { spec: trimmed, exportName, error })
+        return undefined
+      })
+      if (!pluginHooks?.auth) continue
+      moduleHooks.push(pluginHooks.auth)
+    }
+
+    moduleCache.set(modulePath, moduleHooks)
+    hooks.push(...moduleHooks)
+  }
+
+  return hooks
+}
+
+function shouldLoadAuthPlugin(spec: string) {
+  if (!spec) return false
+  if (DEFAULT_AUTH_PLUGINS.includes(spec)) return true
+  const parsed = parsePackageSpec(spec)
+  if (parsed && parsed.pkg.toLowerCase().includes("auth")) return true
+  return spec.toLowerCase().includes("auth")
+}
+
+async function resolvePluginModule(spec: string) {
+  if (!spec) return undefined
+  const trimmed = spec.trim()
+  if (!trimmed) return undefined
+  if (trimmed.startsWith("file://")) return trimmed
+  if (trimmed.startsWith(".") || trimmed.startsWith("/")) {
+    return path.resolve(process.cwd(), trimmed)
+  }
+  const parsed = parsePackageSpec(trimmed)
+  if (!parsed) return undefined
+  try {
+    return await BunProc.install(parsed.pkg, parsed.version)
+  } catch (error) {
+    log.warn("failed to install auth plugin", { spec: trimmed, error })
+    return undefined
+  }
+}
+
+function parsePackageSpec(spec: string) {
+  if (!spec) return undefined
+  if (spec.startsWith("file://") || spec.startsWith(".") || spec.startsWith("/")) return undefined
+
+  let pkg = spec
+  let version = "latest"
+
+  if (spec.startsWith("@")) {
+    const slashIndex = spec.indexOf("/")
+    if (slashIndex === -1) return { pkg, version }
+    const atIndex = spec.indexOf("@", slashIndex)
+    if (atIndex !== -1) {
+      pkg = spec.slice(0, atIndex)
+      version = spec.slice(atIndex + 1) || version
+    }
+  } else {
+    const atIndex = spec.lastIndexOf("@")
+    if (atIndex > 0) {
+      pkg = spec.slice(0, atIndex)
+      version = spec.slice(atIndex + 1) || version
+    }
+  }
+
+  return { pkg, version }
 }

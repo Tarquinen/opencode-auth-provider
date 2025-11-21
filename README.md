@@ -7,7 +7,7 @@ A reusable runtime that mirrors OpenCode's provider discovery logic so plugins c
 - Loads the same `opencode.jsonc` configuration layers (global + workspace) and merges provider overrides
 - Reads `~/.local/share/opencode/auth.json` and environment variables just like the CLI
 - Installs provider SDK packages on-demand (via Bun) and exposes ready-to-use `LanguageModel` instances
-- Boots the official OAuth auth plugins (`opencode-anthropic-auth`, `opencode-copilot-auth`, `opencode-gemini-auth`) so refresh logic matches the CLI
+- Boots the same OAuth auth plugins as the CLI (Anthropic + Copilot by default, plus anything listed in your `opencode.jsonc`, e.g. `opencode-gemini-auth`) so refresh logic matches the CLI
 - Keeps models in sync with [models.dev](https://models.dev) and applies the same filtering rules (e.g. experimental flags)
 
 ## Usage
@@ -85,3 +85,4 @@ bun scripts/chat-with-provider.ts
 - The package requires Bun (matching OpenCode) because it relies on `Bun.spawn`, `Bun.hash`, and Bun's package installer for on-demand provider SDKs.
 - Additional OAuth plugins can be added by listing them in `opencode.jsonc` and installing their npm packages alongside this library.
 - By default the Anthropic and Copilot auth plugins are always loaded (unless `OPENCODE_DISABLE_DEFAULT_PLUGINS=1`).
+- A bundled snapshot of `models.dev` is included so cold starts work offline; when the network is available, it continues to refresh the cache hourly just like the CLI.

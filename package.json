@@ -16,7 +16,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node -e \"require('fs').mkdirSync('dist/provider', { recursive: true }); require('fs').copyFileSync('src/provider/models-static.json', 'dist/provider/models-static.json');\"",
     "clean": "rm -rf dist"
   },
   "dependencies": {
