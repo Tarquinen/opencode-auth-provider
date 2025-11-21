@@ -1,18 +1,11 @@
 import z from "zod"
 import { Global } from "./global"
-import { Log } from "./util/log"
 import path from "path"
 import { NamedError } from "./util/error"
 import { readableStreamToText } from "bun"
 
 export namespace BunProc {
-  const log = Log.create({ service: "bun" })
-
   export async function run(cmd: string[], options?: Bun.SpawnOptions.OptionsObject<any, any, any>) {
-    log.info("running", {
-      cmd: [which(), ...cmd],
-      ...options,
-    })
     const result = Bun.spawn([which(), ...cmd], {
       ...options,
       stdout: "pipe",
@@ -34,11 +27,6 @@ export namespace BunProc {
         ? result.stderr
         : await readableStreamToText(result.stderr)
       : undefined
-    log.info("done", {
-      code,
-      stdout,
-      stderr,
-    })
     if (code !== 0) {
       throw new Error(`Command failed with exit code ${result.exitCode}`)
     }
@@ -69,31 +57,13 @@ export namespace BunProc {
 
     const args = ["add", "--force", "--exact", "--cwd", Global.Path.cache, pkg + "@" + version]
 
-    log.info("installing package using Bun's default registry resolution", {
-      pkg,
-      version,
-    })
-
     const total = 3
     const wait = 500
 
     const runInstall = async (count: number = 1): Promise<void> => {
-      log.info("bun install attempt", {
-        pkg,
-        version,
-        attempt: count,
-        total,
-      })
       await BunProc.run(args, {
         cwd: Global.Path.cache,
       }).catch(async (error) => {
-        log.warn("bun install failed", {
-          pkg,
-          version,
-          attempt: count,
-          total,
-          error,
-        })
         if (count >= total) {
           throw new InstallFailedError(
             { pkg, version },
@@ -103,12 +73,6 @@ export namespace BunProc {
           )
         }
         const delay = wait * count
-        log.info("bun install retrying", {
-          pkg,
-          version,
-          next: count + 1,
-          delay,
-        })
         await Bun.sleep(delay)
         return runInstall(count + 1)
       })

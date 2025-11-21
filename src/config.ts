@@ -4,7 +4,6 @@ import { mergeDeep } from "remeda"
 import { parse } from "jsonc-parser"
 import { Global } from "./global"
 import { Flag } from "./flag"
-import { Log } from "./util/log"
 
 export interface ProviderConfigEntry {
   name?: string
@@ -45,8 +44,6 @@ export interface LoadConfigOptions {
   extraFiles?: string[]
 }
 
-const log = Log.create({ service: "config-loader" })
-
 export async function loadConfig(options: LoadConfigOptions = {}) {
   let result: OpencodeConfig = {}
 
@@ -71,7 +68,7 @@ export async function loadConfig(options: LoadConfigOptions = {}) {
     try {
       result = mergeDeep(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
     } catch (error) {
-      log.warn("failed to parse OPENCODE_CONFIG_CONTENT", { error })
+      // Silently ignore parse errors
     }
   }
 
@@ -137,14 +134,9 @@ async function readConfigFile(file: string) {
     const text = await fs.readFile(file, "utf8")
     const errors: { error: number; offset: number; length: number }[] = []
     const parsed = parse(text, errors, { allowTrailingComma: true }) as OpencodeConfig | undefined
-    if (errors.length) {
-      log.warn("config parse errors", { file, errors })
-    }
     if (!parsed) return {}
-    log.debug("loaded config", { file })
     return parsed
   } catch (error) {
-    log.warn("failed to read config", { file, error })
     return {}
   }
 }

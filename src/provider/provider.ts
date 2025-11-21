@@ -1,7 +1,6 @@
 import z from "zod"
 import { mergeDeep, sortBy } from "remeda"
 import { NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
-import { Log } from "../util/log"
 import { BunProc } from "../bun-proc"
 import { ModelsDev } from "./models"
 import { NamedError } from "../util/error"
@@ -10,8 +9,6 @@ import { Flag } from "../flag"
 import { iife } from "../util/iife"
 import { loadConfig, type OpencodeConfig } from "../config"
 import { loadAuthPlugins } from "../oauth/plugins"
-
-const log = Log.create({ service: "provider-runtime" })
 
 type CustomLoader = (provider: ModelsDev.Provider) => Promise<{
   autoload: boolean
@@ -274,11 +271,6 @@ export class ProviderRuntime {
     const s = await this.state()
     if (s.models.has(key)) return s.models.get(key)!
 
-    log.info("getModel", {
-      providerID,
-      modelID,
-    })
-
     const provider = s.providers[providerID]
     if (!provider) throw new ModelNotFoundError({ providerID, modelID })
     const info = provider.info.models[modelID]
@@ -289,7 +281,6 @@ export class ProviderRuntime {
       const keyReal = `${providerID}/${modelID}`
       const realID = s.realIdByKey.get(keyReal) ?? info.id
       const language = provider.getModel ? await provider.getModel(sdk, realID, provider.options) : sdk.languageModel(realID)
-      log.info("found", { providerID, modelID })
       const payload = {
         providerID,
         modelID,
@@ -381,8 +372,6 @@ export class ProviderRuntime {
     >()
     const sdk = new Map<number, SDK>()
     const realIdByKey = new Map<string, string>()
-
-    log.info("init")
 
     function mergeProvider(
       id: string,
@@ -587,8 +576,6 @@ export class ProviderRuntime {
       if (providerID === "openrouter") {
         provider.info.npm = "@openrouter/ai-sdk-provider"
       }
-
-      log.info("found", { providerID, npm: provider.info.npm })
     }
 
     return {
@@ -616,7 +603,6 @@ export class ProviderRuntime {
       if (!pkg.startsWith("file://")) {
         installedPath = await BunProc.install(pkg, "latest")
       } else {
-        log.info("loading local provider", { pkg })
         installedPath = pkg
       }
 

@@ -1,5 +1,4 @@
 import { Auth } from "../auth"
-import { Log } from "../util/log"
 import path from "path"
 import { BunProc } from "../bun-proc"
 
@@ -8,7 +7,6 @@ export interface AuthPluginHook {
   loader?: (getAuth: () => Promise<Auth.Info | undefined>, provider: any) => Promise<Record<string, any> | undefined | null>
 }
 
-const log = Log.create({ service: "oauth-plugins" })
 const DEFAULT_AUTH_PLUGINS = ["opencode-copilot-auth@0.0.5", "opencode-anthropic-auth@0.0.2"]
 const moduleCache = new Map<string, AuthPluginHook[]>()
 
@@ -50,10 +48,7 @@ export async function loadAuthPlugins(pluginSpecs: string[], includeDefaults: bo
     }
 
     const moduleHooks: AuthPluginHook[] = []
-    const mod = await import(modulePath).catch((error) => {
-      log.warn("failed to load auth plugin module", { spec: trimmed, error })
-      return undefined
-    })
+    const mod = await import(modulePath).catch(() => undefined)
     if (!mod) {
       moduleCache.set(modulePath, moduleHooks)
       continue
@@ -62,10 +57,7 @@ export async function loadAuthPlugins(pluginSpecs: string[], includeDefaults: bo
     for (const [exportName, factory] of Object.entries(mod)) {
       if (typeof factory !== "function") continue
 
-      const pluginHooks = await (factory as any)(pluginInput).catch((error: any) => {
-        log.warn("auth plugin init failed", { spec: trimmed, exportName, error })
-        return undefined
-      })
+      const pluginHooks = await (factory as any)(pluginInput).catch(() => undefined)
       if (!pluginHooks?.auth) continue
       moduleHooks.push(pluginHooks.auth)
     }
@@ -101,7 +93,6 @@ async function resolvePluginModule(spec: string) {
   try {
     return await BunProc.install(parsed.pkg, parsed.version)
   } catch (error) {
-    log.warn("failed to install auth plugin", { spec: trimmed, error })
     return undefined
   }
 }
