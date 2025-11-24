@@ -335,7 +335,7 @@ export class ProviderRuntime {
 
     const provider = await this.list()
       .then((val) => Object.values(val))
-      .then((x) => x.find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.info.id)))
+      .then((x) => x.find((p) => !cfg.provider || Object.keys(cfg.provider).length === 0 || Object.keys(cfg.provider).includes(p.info.id)))
     if (!provider) throw new Error("no providers found")
     const [model] = ProviderRuntime.sort(Object.values(provider.info.models))
     if (!model) throw new Error("no models found")
