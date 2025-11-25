@@ -1,6 +1,6 @@
-import { Auth } from "../auth"
+import { Auth } from "../auth.js"
 import path from "path"
-import { BunProc } from "../bun-proc"
+import { BunProc } from "../bun-proc.js"
 
 export interface AuthPluginHook {
   provider: string

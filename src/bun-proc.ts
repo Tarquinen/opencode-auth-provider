@@ -1,7 +1,7 @@
 import z from "zod"
-import { Global } from "./global"
+import { Global } from "./global.js"
 import path from "path"
-import { NamedError } from "./util/error"
+import { NamedError } from "./util/error.js"
 import { readableStreamToText } from "bun"
 
 export namespace BunProc {

@@ -1,14 +1,14 @@
 import z from "zod"
 import { mergeDeep, sortBy } from "remeda"
 import { NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
-import { BunProc } from "../bun-proc"
-import { ModelsDev } from "./models"
-import { NamedError } from "../util/error"
-import { Auth } from "../auth"
-import { Flag } from "../flag"
-import { iife } from "../util/iife"
-import { loadConfig, type OpencodeConfig } from "../config"
-import { loadAuthPlugins } from "../oauth/plugins"
+import { BunProc } from "../bun-proc.js"
+import { ModelsDev } from "./models.js"
+import { NamedError } from "../util/error.js"
+import { Auth } from "../auth.js"
+import { Flag } from "../flag.js"
+import { iife } from "../util/iife.js"
+import { loadConfig, type OpencodeConfig } from "../config.js"
+import { loadAuthPlugins } from "../oauth/plugins.js"
 
 type CustomLoader = (provider: ModelsDev.Provider) => Promise<{
   autoload: boolean

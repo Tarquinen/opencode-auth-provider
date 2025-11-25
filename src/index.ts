@@ -1,7 +1,7 @@
 import type { LanguageModel } from "ai"
-import { Auth } from "./auth"
-import { ProviderRuntime, type ProviderRuntimeOptions } from "./provider/provider"
-import type { ModelsDev } from "./provider/models"
+import { Auth } from "./auth.js"
+import { ProviderRuntime, type ProviderRuntimeOptions } from "./provider/provider.js"
+import type { ModelsDev } from "./provider/models.js"
 
 export class OpencodeAI {
   private readonly runtime: ProviderRuntime

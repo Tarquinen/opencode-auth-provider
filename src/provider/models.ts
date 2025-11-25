@@ -1,8 +1,8 @@
-import { Global } from "../global"
+import { Global } from "../global.js"
 import path from "path"
 import z from "zod"
-import { data } from "./models-macro"
-import { Installation } from "../installation"
+import { data } from "./models-macro.js"
+import { Installation } from "../installation.js"
 
 export namespace ModelsDev {
   const filepath = path.join(Global.Path.cache, "models.json")

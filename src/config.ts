@@ -2,8 +2,8 @@ import path from "path"
 import fs from "fs/promises"
 import { mergeDeep } from "remeda"
 import { parse } from "jsonc-parser"
-import { Global } from "./global"
-import { Flag } from "./flag"
+import { Global } from "./global.js"
+import { Flag } from "./flag.js"
 
 export interface ProviderConfigEntry {
   name?: string
