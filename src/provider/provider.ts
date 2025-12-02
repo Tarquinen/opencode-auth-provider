@@ -58,6 +58,30 @@ const CUSTOM_LOADERS: Record<string, CustomLoader> = {
       options: {},
     }
   },
+  "github-copilot": async () => {
+    return {
+      autoload: false,
+      async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+        if (modelID.includes("codex")) {
+          return sdk.responses(modelID)
+        }
+        return sdk.chat(modelID)
+      },
+      options: {},
+    }
+  },
+  "github-copilot-enterprise": async () => {
+    return {
+      autoload: false,
+      async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+        if (modelID.includes("codex")) {
+          return sdk.responses(modelID)
+        }
+        return sdk.chat(modelID)
+      },
+      options: {},
+    }
+  },
   azure: async () => {
     return {
       autoload: false,
@@ -101,6 +125,11 @@ const CUSTOM_LOADERS: Record<string, CustomLoader> = {
         credentialProvider: fromNodeProviderChain(),
       },
       async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+        // Skip region prefixing if model already has global prefix
+        if (modelID.startsWith("global.")) {
+          return sdk.languageModel(modelID)
+        }
+
         let regionPrefix = region.split("-")[0]
 
         switch (regionPrefix) {
@@ -483,23 +512,30 @@ export class ProviderRuntime {
     }
 
     const disabled = new Set(config.disabled_providers ?? [])
+    const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
+
+    function isProviderAllowed(providerID: string): boolean {
+      if (enabled && !enabled.has(providerID)) return false
+      if (disabled.has(providerID)) return false
+      return true
+    }
 
     for (const [providerID, provider] of Object.entries(database)) {
-      if (disabled.has(providerID)) continue
+      if (!isProviderAllowed(providerID)) continue
       const apiKey = provider.env.map((item) => process.env[item]).at(0)
       if (!apiKey) continue
       mergeProvider(providerID, provider.env.length === 1 ? { apiKey } : {}, "env")
     }
 
     for (const [providerID, provider] of Object.entries(await Auth.all())) {
-      if (disabled.has(providerID)) continue
+      if (!isProviderAllowed(providerID)) continue
       if (provider.type === "api") {
         mergeProvider(providerID, { apiKey: provider.key }, "api")
       }
     }
 
     for (const [providerID, fn] of Object.entries(CUSTOM_LOADERS)) {
-      if (disabled.has(providerID)) continue
+      if (!isProviderAllowed(providerID)) continue
       const result = await fn(database[providerID])
       if (result && (result.autoload || providers[providerID])) {
         mergeProvider(providerID, result.options ?? {}, "custom", result.getModel)
@@ -511,7 +547,7 @@ export class ProviderRuntime {
     for (const hook of pluginHooks) {
       const providerID = hook.provider
       if (!providerID) continue
-      if (disabled.has(providerID)) continue
+      if (!isProviderAllowed(providerID)) continue
 
       let hasAuth = false
       const auth = await Auth.get(providerID)
@@ -535,16 +571,17 @@ export class ProviderRuntime {
 
       if (providerID === "github-copilot") {
         const enterpriseProviderID = "github-copilot-enterprise"
-        if (!disabled.has(enterpriseProviderID)) {
+        if (isProviderAllowed(enterpriseProviderID)) {
           const enterpriseInfo = database[enterpriseProviderID]
-          if (!enterpriseInfo) continue
-          const enterpriseAuth = await Auth.get(enterpriseProviderID)
-          if (enterpriseAuth) {
-            const enterpriseOptions = await hook.loader(
-              () => Auth.get(enterpriseProviderID) as any,
-              enterpriseInfo,
-            )
-            mergeProvider(enterpriseProviderID, enterpriseOptions ?? {}, "custom")
+          if (enterpriseInfo) {
+            const enterpriseAuth = await Auth.get(enterpriseProviderID)
+            if (enterpriseAuth) {
+              const enterpriseOptions = await hook.loader(
+                () => Auth.get(enterpriseProviderID) as any,
+                enterpriseInfo,
+              )
+              mergeProvider(enterpriseProviderID, enterpriseOptions ?? {}, "custom")
+            }
           }
         }
       }
@@ -555,16 +592,37 @@ export class ProviderRuntime {
     }
 
     for (const [providerID, provider] of Object.entries(providers)) {
+      if (!isProviderAllowed(providerID)) {
+        delete providers[providerID]
+        continue
+      }
+
+      if (providerID === "github-copilot") {
+        provider.info.npm = "@ai-sdk/openai-compatible"
+      }
+
+      const configProvider = config.provider?.[providerID]
       const filteredModels = Object.fromEntries(
         Object.entries(provider.info.models)
+          // Filter out blacklisted models
           .filter(
             ([modelID]) => modelID !== "gpt-5-chat-latest" && !(providerID === "openrouter" && modelID === "openai/gpt-5-chat"),
           )
+          // Filter out experimental models
           .filter(
             ([, model]) =>
               ((!model.experimental && model.status !== "alpha") || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) &&
               model.status !== "deprecated",
-          ),
+          )
+          // Filter by provider's whitelist/blacklist from config
+          .filter(([modelID]) => {
+            if (!configProvider) return true
+
+            return (
+              (!configProvider.blacklist || !configProvider.blacklist.includes(modelID)) &&
+              (!configProvider.whitelist || configProvider.whitelist.includes(modelID))
+            )
+          }),
       )
       provider.info.models = filteredModels
 
@@ -599,16 +657,6 @@ export class ProviderRuntime {
       const existing = state.sdk.get(key)
       if (existing) return existing
 
-      let installedPath: string
-      if (!pkg.startsWith("file://")) {
-        installedPath = await BunProc.install(pkg, "latest")
-      } else {
-        installedPath = pkg
-      }
-
-      const modPath = provider.id === "google-vertex-anthropic" ? `${installedPath}/dist/anthropic/index.mjs` : installedPath
-      const mod = await import(modPath)
-
       const customFetch = options["fetch"]
 
       options["fetch"] = async (input: any, init?: RequestInit) => {
@@ -630,6 +678,31 @@ export class ProviderRuntime {
           timeout: false as any,
         })
       }
+
+      // Try to use bundled provider first (if available as peer dependency)
+      const bundledKey = provider.id === "google-vertex-anthropic" ? "@ai-sdk/google-vertex" : pkg
+      const bundledMod = await this.tryBundledProvider(bundledKey, provider.id)
+      if (bundledMod) {
+        const fn = bundledMod[Object.keys(bundledMod).find((key) => key.startsWith("create"))!]
+        const loaded = fn({
+          name: provider.id,
+          ...options,
+        })
+        state.sdk.set(key, loaded)
+        return loaded as SDK
+      }
+
+      // Fall back to dynamic install
+      let installedPath: string
+      if (!pkg.startsWith("file://")) {
+        installedPath = await BunProc.install(pkg, "latest")
+      } else {
+        installedPath = pkg
+      }
+
+      const modPath = provider.id === "google-vertex-anthropic" ? `${installedPath}/dist/anthropic/index.mjs` : installedPath
+      const mod = await import(modPath)
+
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
       const loaded = fn({
         name: provider.id,
@@ -640,6 +713,36 @@ export class ProviderRuntime {
     })().catch((e) => {
       throw new InitError({ providerID: provider.id }, { cause: e })
     })
+  }
+
+  private async tryBundledProvider(pkg: string, providerID: string): Promise<any | undefined> {
+    // Map of bundled provider packages to their import paths
+    const bundledProviders: Record<string, string> = {
+      "@ai-sdk/anthropic": "@ai-sdk/anthropic",
+      "@ai-sdk/openai": "@ai-sdk/openai",
+      "@ai-sdk/google": "@ai-sdk/google",
+      "@ai-sdk/azure": "@ai-sdk/azure",
+      "@ai-sdk/amazon-bedrock": "@ai-sdk/amazon-bedrock",
+      "@ai-sdk/google-vertex": "@ai-sdk/google-vertex",
+      "@ai-sdk/openai-compatible": "@ai-sdk/openai-compatible",
+      "@openrouter/ai-sdk-provider": "@openrouter/ai-sdk-provider",
+    }
+
+    const importPath = bundledProviders[pkg]
+    if (!importPath) return undefined
+
+    try {
+      // For google-vertex-anthropic, we need the anthropic subpath
+      if (providerID === "google-vertex-anthropic") {
+        // Use variable to avoid TypeScript trying to resolve at compile time
+        const subpath = "@ai-sdk/google-vertex/anthropic"
+        return await import(/* @vite-ignore */ subpath)
+      }
+      return await import(/* @vite-ignore */ importPath)
+    } catch {
+      // Package not installed as peer dependency, fall back to dynamic install
+      return undefined
+    }
   }
 
   static parseModel(model: string) {

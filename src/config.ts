@@ -11,6 +11,8 @@ export interface ProviderConfigEntry {
   api?: string
   npm?: string
   options?: Record<string, any>
+  whitelist?: string[]
+  blacklist?: string[]
   models?: Record<
     string,
     {
@@ -35,6 +37,7 @@ export interface OpencodeConfig {
   provider?: Record<string, ProviderConfigEntry>
   plugin?: string[]
   disabled_providers?: string[]
+  enabled_providers?: string[]
   model?: string
   small_model?: string
 }
