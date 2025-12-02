@@ -1,6 +1,6 @@
 {
   "name": "@tarquinen/opencode-auth-provider",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Reuse OpenCode authentication & provider logic for clean AI calls in plugins",
   "type": "module",
   "author": "tarquinen",
